@@ -1,0 +1,130 @@
+"""
+config.py — Central configuration for GC Gold Futures Trading System
+Edit this file to tune strategy parameters.
+"""
+
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# ── Paths ──────────────────────────────────────────────────────────────────────
+BASE_DIR   = Path(__file__).parent
+MODEL_DIR  = Path(os.getenv("MODEL_DIR", BASE_DIR / "models" / "saved"))
+MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+# ── API Keys ───────────────────────────────────────────────────────────────────
+DATABENTO_API_KEY = os.getenv("DATABENTO_API_KEY")
+FRED_API_KEY      = os.getenv("FRED_API_KEY")
+TOPSTEP_USERNAME  = os.getenv("TOPSTEP_USERNAME")
+TOPSTEP_API_KEY   = os.getenv("TOPSTEP_API_KEY")
+TRADING_MODE      = os.getenv("TRADING_MODE", "demo")  # "demo" or "live"
+
+# ── QuestDB ────────────────────────────────────────────────────────────────────
+QUESTDB = {
+    "host":      os.getenv("QUESTDB_HOST", "localhost"),
+    "http_port": int(os.getenv("QUESTDB_HTTP_PORT", 9000)),
+    "pg_port":   int(os.getenv("QUESTDB_PG_PORT", 8812)),
+    "user":      os.getenv("QUESTDB_USER", "admin"),
+    "password":  os.getenv("QUESTDB_PASSWORD", "quest"),
+}
+
+# ── Data ───────────────────────────────────────────────────────────────────────
+DATA = {
+    "dataset":     "GLBX.MDP3",        # CME Globex
+    "symbol":      "GC.n.0",           # Gold front-month, open-interest roll
+    "schema":      "ohlcv-1h",         # 1-hour bars for ML features
+    "tick_schema": "trades",           # Tick data for order flow
+    "history_start": "2018-01-01",     # How far back to pull for training
+}
+
+# ── Features ───────────────────────────────────────────────────────────────────
+FEATURES = {
+    "seq_len":   48,    # LSTM lookback window (48 x 1H = 2 days)
+    "target_horizon": 4,  # Predict 4-bar (4H) forward return direction
+    "warmup_bars":    50, # Bars needed before first valid signal
+}
+
+# ── LightGBM ───────────────────────────────────────────────────────────────────
+LGBM_PARAMS = {
+    "objective":        "binary",
+    "metric":           "auc",
+    "learning_rate":    0.02,
+    "num_leaves":       63,
+    "feature_fraction": 0.7,
+    "bagging_fraction": 0.8,
+    "bagging_freq":     5,
+    "min_child_samples":50,
+    "lambda_l1":        0.1,
+    "lambda_l2":        0.1,
+    "device":           "gpu",    # Set to "cpu" if no GPU available
+    "verbose":          -1,
+}
+
+LGBM_TRAINING = {
+    "n_splits":         5,         # Walk-forward folds
+    "train_pct":        0.60,      # 60% train window
+    "val_pct":          0.08,      # 8% validation per fold
+    "num_boost_round":  1000,
+    "early_stopping":   50,
+}
+
+# ── PyTorch LSTM ───────────────────────────────────────────────────────────────
+LSTM_PARAMS = {
+    "hidden_size":  128,
+    "num_layers":   2,
+    "dropout":      0.3,
+    "num_heads":    4,        # Multi-head attention heads
+    "lr":           1e-3,
+    "batch_size":   64,
+    "epochs":       80,
+    "patience":     15,       # Early stopping patience
+}
+
+# ── Ensemble Signal ────────────────────────────────────────────────────────────
+SIGNAL = {
+    "lgbm_weight":  0.55,    # LightGBM weight in ensemble
+    "lstm_weight":  0.45,    # LSTM weight in ensemble
+    "long_thresh":  0.65,    # Probability > this → go long
+    "short_thresh": 0.35,    # Probability < this → go short
+    # Between 0.35 and 0.65 = no trade (flat)
+}
+
+# ── Risk Management ────────────────────────────────────────────────────────────
+RISK = {
+    "risk_pct_per_trade": 0.01,    # Risk 1% of account per trade
+    "atr_multiplier":     1.5,     # Stop = 1.5x ATR
+    "max_contracts":      5,       # Conservative — Topstep allows 10 on $100K
+    "min_contracts":      1,
+}
+
+# ── Topstep Rules (DO NOT CHANGE — hardcoded from Topstep TOS) ────────────────
+TOPSTEP = {
+    "account_size":       100_000,
+    "daily_loss_limit":  -2_000,    # -2% of account
+    "trailing_drawdown": -4_000,    # -4% trailing
+    "max_contracts":      10,
+    "profit_target":      6_000,    # Combine target: 6% = $6K
+    "close_by_time":      "15:58",  # CT — no overnight
+    "close_day":          4,        # Friday (0=Mon)
+    "consistency_limit":  0.50,     # No single day > 50% of total profit
+}
+
+# ── TopstepX API Endpoints ─────────────────────────────────────────────────────
+PROJECTX = {
+    "api_url":       "https://api.topstepx.com/api",
+    "user_hub_url":  "https://rtc.topstepx.com/hubs/user",
+    "market_hub_url":"https://rtc.topstepx.com/hubs/market",
+    "timeout":        30,
+    "retry_attempts": 3,
+}
+
+# ── GC Contract Specs ──────────────────────────────────────────────────────────
+GC_CONTRACT = {
+    "point_value":  100,     # $100 per $1 move
+    "tick_size":    0.10,    # $0.10 minimum tick
+    "tick_value":   10,      # $10 per tick
+    "margin":       11_000,  # Approximate initial margin (fluctuates)
+    "symbol_px":    "CON.F.US.GC",  # ProjectX contract prefix
+}

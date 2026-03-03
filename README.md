@@ -1,1 +1,1 @@
-# gctstep
+# gc_trading package
